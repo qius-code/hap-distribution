@@ -1,9 +1,6 @@
-name = "hap-range-handler"
-main = "worker.js"
-compatibility_date = "2024-01-01"
+name = "harmony-hap-distribution"
+main = "cloudflare-worker.js"
+compatibility_date = "2024-03-01"
 
-# 注释掉路由配置，先部署基本的Worker
-# [env.production]
-# routes = [
-#   { pattern = "qius.hm-34r.pages.dev/hap/*", zone_name = "hm-34r.pages.dev" }
-# ] 
+# 鸿蒙HAP包分发专用Worker
+# 支持Range请求，返回206状态码 
