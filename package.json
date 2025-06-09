@@ -1,0 +1,14 @@
+{
+  "name": "hap-distribution-vercel",
+  "version": "1.0.0",
+  "description": "HAP distribution with Vercel for sharded downloads",
+  "main": "api/handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "author": "",
+  "license": "ISC"
+} 
