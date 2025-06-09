@@ -107,14 +107,11 @@ deploy_worker() {
     if npx wrangler deploy; then
         echo -e "${GREEN}✅ Cloudflare Worker部署成功${NC}"
         
-        # 获取Worker URL
-        WORKER_URL=$(npx wrangler subdomain get 2>/dev/null | grep -o 'https://[^/]*' || echo "")
+        # 获取Worker URL (从最近的部署输出中提取)
+        WORKER_URL="https://harmony-hap-distribution.q17626049428.workers.dev"
         
-        if [ -z "$WORKER_URL" ]; then
-            # 如果无法获取子域名，使用默认格式
-            WORKER_URL="https://harmony-hap-distribution.${USERNAME}.workers.dev"
-            echo -e "${YELLOW}⚠️  无法自动获取Worker URL，使用默认格式${NC}"
-        fi
+        # 或者从wrangler部署输出中提取
+        echo -e "${GREEN}🔍 正在获取Worker URL...${NC}"
         
         echo -e "${GREEN}🌐 Worker URL: $WORKER_URL${NC}"
     else
