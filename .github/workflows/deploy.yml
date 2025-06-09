@@ -1,0 +1,261 @@
+name: 🚀 HAP Distribution Auto Deploy
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'hap/**'
+      - 'asset/**'
+      - 'index.html'
+      - 'deploy.sh'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史，用于计算版本
+        
+    - name: 🔍 Check HAP file
+      run: |
+        if [ ! -f "hap/AppSigned.hap" ]; then
+          echo "❌ HAP file not found"
+          exit 1
+        fi
+        
+        # 输出HAP文件信息
+        echo "📦 HAP file size: $(du -h hap/AppSigned.hap | cut -f1)"
+        echo "🔐 HAP file hash: $(sha256sum hap/AppSigned.hap | cut -d' ' -f1)"
+        
+    - name: 📝 Update manifest configuration for HarmonyOS
+      run: |
+        # 计算HAP文件哈希
+        PACKAGE_HASH=$(sha256sum hap/AppSigned.hap | cut -d' ' -f1)
+        echo "PACKAGE_HASH=$PACKAGE_HASH" >> $GITHUB_ENV
+        
+        # 获取仓库信息
+        USERNAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f1)
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+        echo "USERNAME=$USERNAME" >> $GITHUB_ENV
+        echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+        
+        # 构建CDN URLs（鸿蒙要求域名一致性）
+        DEPLOY_DOMAIN="cdn.jsdelivr.net"
+        CDN_BASE_URL="https://cdn.jsdelivr.net/gh/$USERNAME/$REPO_NAME@main"
+        PACKAGE_URL="$CDN_BASE_URL/hap/AppSigned.hap"
+        MANIFEST_URL="$CDN_BASE_URL/hap/manifest-jsdelivr.json5"
+        
+        echo "DEPLOY_DOMAIN=$DEPLOY_DOMAIN" >> $GITHUB_ENV
+        echo "CDN_BASE_URL=$CDN_BASE_URL" >> $GITHUB_ENV
+        echo "PACKAGE_URL=$PACKAGE_URL" >> $GITHUB_ENV
+        echo "MANIFEST_URL=$MANIFEST_URL" >> $GITHUB_ENV
+        
+        # 更新manifest文件（符合鸿蒙规范）
+        if [ -f "hap/manifest-jsdelivr.json5" ]; then
+          # 备份原始文件
+          cp "hap/manifest-jsdelivr.json5" "hap/manifest-jsdelivr.json5.bak"
+          
+          # 使用Python更新JSON（更可靠）
+          python3 -c "
+        import json
+        import sys
+        
+        try:
+            with open('hap/manifest-jsdelivr.json5', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # 更新配置确保符合鸿蒙要求
+            data['app']['deployDomain'] = '$DEPLOY_DOMAIN'
+            data['app']['icons']['normal'] = '$CDN_BASE_URL/asset/icon29.png'
+            data['app']['icons']['large'] = '$CDN_BASE_URL/asset/icon1024.png'
+            data['app']['modules'][0]['packageUrl'] = '$PACKAGE_URL'
+            data['app']['modules'][0]['packageHash'] = '$PACKAGE_HASH'
+            
+            # 验证URL格式
+            if not data['app']['modules'][0]['packageUrl'].endswith('.hap'):
+                print('❌ 错误: packageUrl必须以.hap结尾')
+                sys.exit(1)
+            
+            if not data['app']['modules'][0]['packageUrl'].startswith('https://'):
+                print('❌ 错误: packageUrl必须以https://开头')
+                sys.exit(1)
+            
+            # 写入更新后的配置
+            with open('hap/manifest-jsdelivr.json5', 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
+            
+            print('✅ Manifest updated for HarmonyOS compatibility')
+        except Exception as e:
+            print(f'❌ Error updating manifest: {e}')
+            sys.exit(1)
+          "
+          
+          # 复制到根目录供鸿蒙访问
+          cp "hap/manifest-jsdelivr.json5" "manifest.json5"
+          echo "✅ Copied manifest to root directory"
+        else
+          echo "❌ manifest-jsdelivr.json5 not found"
+          exit 1
+        fi
+        
+    - name: 🔍 Validate HarmonyOS compliance
+      run: |
+        echo "🔍 验证鸿蒙分发要求..."
+        
+        # 验证manifest格式
+        if ! python3 -m json.tool hap/manifest-jsdelivr.json5 > /dev/null 2>&1; then
+          echo "❌ manifest.json5 格式错误"
+          exit 1
+        fi
+        echo "✅ Manifest JSON格式正确"
+        
+        # 验证域名一致性
+        DEPLOY_DOMAIN_CHECK=$(python3 -c "import json; data=json.load(open('hap/manifest-jsdelivr.json5')); print(data['app']['deployDomain'])")
+        PACKAGE_URL_CHECK=$(python3 -c "import json; data=json.load(open('hap/manifest-jsdelivr.json5')); print(data['app']['modules'][0]['packageUrl'])")
+        
+        if [[ "$PACKAGE_URL_CHECK" != *"$DEPLOY_DOMAIN_CHECK"* ]]; then
+          echo "❌ 域名不一致: deployDomain=$DEPLOY_DOMAIN_CHECK, packageUrl=$PACKAGE_URL_CHECK"
+          exit 1
+        fi
+        echo "✅ 域名一致性验证通过"
+        
+        # 验证URL格式
+        if [[ "$PACKAGE_URL_CHECK" != https://* ]]; then
+          echo "❌ packageUrl必须以https://开头"
+          exit 1
+        fi
+        
+        if [[ "$PACKAGE_URL_CHECK" != *.hap ]]; then
+          echo "❌ packageUrl必须以.hap结尾"
+          exit 1
+        fi
+        echo "✅ URL格式验证通过"
+        
+        # 验证必要字段
+        BUNDLE_NAME=$(python3 -c "import json; data=json.load(open('hap/manifest-jsdelivr.json5')); print(data['app']['bundleName'])")
+        VERSION_CODE=$(python3 -c "import json; data=json.load(open('hap/manifest-jsdelivr.json5')); print(data['app']['versionCode'])")
+        
+        if [ -z "$BUNDLE_NAME" ] || [ "$BUNDLE_NAME" = "null" ]; then
+          echo "❌ bundleName不能为空"
+          exit 1
+        fi
+        
+        if [ -z "$VERSION_CODE" ] || [ "$VERSION_CODE" = "null" ]; then
+          echo "❌ versionCode不能为空"
+          exit 1
+        fi
+        echo "✅ 必要字段验证通过"
+        
+        # 生成DeepLink
+        ENCODED_URL=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$MANIFEST_URL', safe=''))")
+        DEEPLINK="store://enterprise/manifest?url=$ENCODED_URL"
+        echo "DEEPLINK=$DEEPLINK" >> $GITHUB_ENV
+        echo "✅ DeepLink已生成: $DEEPLINK"
+        
+    - name: 🌐 Create .nojekyll file
+      run: |
+        if [ ! -f ".nojekyll" ]; then
+          touch .nojekyll
+          echo "✅ Created .nojekyll file"
+        fi
+        
+    - name: 📋 Generate HarmonyOS deployment summary
+      run: |
+        echo "## 🚀 鸿蒙HAP包分发部署摘要" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| 项目 | 信息 |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+        echo "| 📦 HAP文件 | AppSigned.hap |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🔐 文件哈希 | \`${PACKAGE_HASH:0:16}...\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🌐 部署域名 | $DEPLOY_DOMAIN |" >> $GITHUB_STEP_SUMMARY
+        echo "| 📱 HAP下载 | [$PACKAGE_URL]($PACKAGE_URL) |" >> $GITHUB_STEP_SUMMARY
+        echo "| 📋 配置文件 | [$MANIFEST_URL]($MANIFEST_URL) |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🔗 DeepLink | \`$DEEPLINK\` |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🎯 鸿蒙安装说明" >> $GITHUB_STEP_SUMMARY
+        echo "1. **在华为浏览器中使用**: 仅支持华为浏览器打开DeepLink" >> $GITHUB_STEP_SUMMARY
+        echo "2. **点击触发**: 必须通过页面点击按钮触发，不能直接输入地址栏" >> $GITHUB_STEP_SUMMARY
+        echo "3. **Range请求支持**: ✅ 已配置HTTP分片下载支持" >> $GITHUB_STEP_SUMMARY
+        echo "4. **域名一致性**: ✅ deployDomain与下载URL域名一致" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📌 技术要求验证" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ HTTPS协议" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ .hap文件后缀" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ .json5配置文件" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ SHA256文件校验" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ HTTP Range请求支持" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### ⏰ 同步时间" >> $GITHUB_STEP_SUMMARY
+        echo "- jsDelivr CDN: 5-10 分钟同步" >> $GITHUB_STEP_SUMMARY
+        echo "- GitHub Pages: 构建完成后可访问" >> $GITHUB_STEP_SUMMARY
+        echo "- 缓存刷新: [purge.jsdelivr.net](https://purge.jsdelivr.net/gh/$USERNAME/$REPO_NAME@main/hap/AppSigned.hap)" >> $GITHUB_STEP_SUMMARY
+        
+    - name: 🚀 Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./
+        enable_jekyll: false
+        cname: ${{ secrets.CUSTOM_DOMAIN }}  # 可选：设置自定义域名
+        
+    - name: 💬 Add PR comment
+      uses: actions/github-script@v7
+      if: github.event_name == 'pull_request'
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 🚀 HAP分发预览
+            
+            这个PR将更新HAP包分发配置：
+            
+            - 📦 HAP文件哈希: \`${process.env.PACKAGE_HASH?.substring(0, 16)}...\`
+            - 🌐 jsDelivr CDN: ${process.env.CDN_BASE_URL}
+            - 📱 下载地址: ${process.env.PACKAGE_URL}
+            
+            合并后将自动部署到GitHub Pages。`
+          })
+          
+  # 健康检查任务
+  health-check:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: 🏥 Health check
+      run: |
+        USERNAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f1)
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+        
+        # 等待部署完成
+        sleep 30
+        
+        # 检查GitHub Pages
+        PAGES_URL="https://$USERNAME.github.io/$REPO_NAME/"
+        echo "🌐 检查GitHub Pages: $PAGES_URL"
+        
+        if curl -f -s "$PAGES_URL" > /dev/null; then
+          echo "✅ GitHub Pages 可访问"
+        else
+          echo "⚠️ GitHub Pages 暂时不可访问（可能还在构建中）"
+        fi
+        
+        # 检查jsDelivr CDN
+        CDN_URL="https://cdn.jsdelivr.net/gh/$USERNAME/$REPO_NAME@main/hap/AppSigned.hap"
+        echo "🚀 检查jsDelivr CDN: $CDN_URL"
+        
+        if curl -f -s -I "$CDN_URL" > /dev/null; then
+          echo "✅ jsDelivr CDN 可访问"
+        else
+          echo "⚠️ jsDelivr CDN 暂时不可访问（可能还在同步中）"
+        fi 

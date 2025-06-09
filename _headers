@@ -1,31 +1,85 @@
-# 配置HAP包和manifest文件的响应头，支持分片下载
+# 鸿蒙HAP包分发专用响应头配置
+# 必须支持HTTP Range请求（分片下载），返回206状态码
+
+# HAP包文件配置 - 关键！必须支持Range请求
 /hap/*.hap
   Accept-Ranges: bytes
   Content-Type: application/octet-stream
-  Cache-Control: public, max-age=3600
+  Cache-Control: public, max-age=86400
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Methods: GET, HEAD, OPTIONS
-  Access-Control-Allow-Headers: Range, Content-Range
-  Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges
+  Access-Control-Allow-Headers: Range, Content-Range, Authorization, Content-Type
+  Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Last-Modified
+  Content-Disposition: attachment
+  X-Content-Type-Options: nosniff
 
-/hap/manifest.json5
+# HSP包文件配置（如果有）
+/hap/*.hsp
   Accept-Ranges: bytes
-  Content-Type: application/json
-  Cache-Control: public, max-age=3600
+  Content-Type: application/octet-stream
+  Cache-Control: public, max-age=86400
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Methods: GET, HEAD, OPTIONS
-  Access-Control-Allow-Headers: Range, Content-Range
-  Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges
+  Access-Control-Allow-Headers: Range, Content-Range, Authorization, Content-Type
+  Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Last-Modified
+  Content-Disposition: attachment
+  X-Content-Type-Options: nosniff
 
-# 配置图标资源
+# manifest描述文件配置 - 关键！鸿蒙必须能正确下载
+/hap/*.json5
+  Accept-Ranges: bytes
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+  Access-Control-Allow-Headers: Range, Content-Range, Authorization, Content-Type
+  Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Last-Modified
+  X-Content-Type-Options: nosniff
+
+# 专门为根目录的manifest.json5配置
+/manifest.json5
+  Accept-Ranges: bytes
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+  Access-Control-Allow-Headers: Range, Content-Range, Authorization, Content-Type
+  Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Last-Modified
+  X-Content-Type-Options: nosniff
+
+# 应用图标配置 - 鸿蒙需要加载图标
 /asset/*.png
   Accept-Ranges: bytes
   Content-Type: image/png
-  Cache-Control: public, max-age=31536000
+  Cache-Control: public, max-age=2592000
   Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+  Access-Control-Expose-Headers: Content-Length, Accept-Ranges, Last-Modified
 
-# 配置主页面
+/asset/*.jpg
+  Accept-Ranges: bytes
+  Content-Type: image/jpeg
+  Cache-Control: public, max-age=2592000
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+  Access-Control-Expose-Headers: Content-Length, Accept-Ranges, Last-Modified
+
+/asset/*.webp
+  Accept-Ranges: bytes
+  Content-Type: image/webp
+  Cache-Control: public, max-age=2592000
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+  Access-Control-Expose-Headers: Content-Length, Accept-Ranges, Last-Modified
+
+# 主页面配置
 /
   Cache-Control: public, max-age=3600
-  X-Frame-Options: DENY
-  X-Content-Type-Options: nosniff 
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# 通用文件配置
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin 
