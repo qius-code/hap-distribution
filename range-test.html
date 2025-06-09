@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HAP分片下载测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .info { color: #17a2b8; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>HAP包分片下载测试</h1>
+    
+    <div>
+        <h2>测试说明</h2>
+        <p>华为设备需要服务器正确支持HTTP Range请求来分片下载HAP包。</p>
+        <p><strong>期望结果：</strong>Range请求应该返回206状态码和部分内容。</p>
+    </div>
+
+    <div>
+        <h2>测试控制</h2>
+        <button onclick="testRange()">测试Range请求</button>
+        <button onclick="testFull()">测试完整下载</button>
+        <button onclick="clearResults()">清除结果</button>
+    </div>
+
+    <div>
+        <h2>测试结果</h2>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `${new Date().toLocaleTimeString()} - ${message}`;
+            results.appendChild(div);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        async function testRange() {
+            log('🔍 开始测试Range请求...', 'info');
+            
+            const hapUrl = '/hap/AppSigned.hap';
+            
+            try {
+                const response = await fetch(hapUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Range': 'bytes=0-1023'
+                    }
+                });
+
+                log(`📍 请求URL: ${hapUrl}`, 'info');
+                log(`📝 请求头: Range: bytes=0-1023`, 'info');
+                log(`📊 响应状态: ${response.status} ${response.statusText}`, 
+                    response.status === 206 ? 'success' : 'error');
+
+                const acceptRanges = response.headers.get('Accept-Ranges');
+                const contentRange = response.headers.get('Content-Range');
+                const contentLength = response.headers.get('Content-Length');
+
+                log(`🔧 Accept-Ranges: ${acceptRanges || '未设置'}`, 
+                    acceptRanges === 'bytes' ? 'success' : 'error');
+                log(`📏 Content-Range: ${contentRange || '未设置'}`, 
+                    contentRange ? 'success' : 'error');
+                log(`📦 Content-Length: ${contentLength || '未设置'}`, 'info');
+
+                // 检查实际接收的数据大小
+                const blob = await response.blob();
+                const actualSize = blob.size;
+                
+                log(`📊 实际接收字节数: ${actualSize}`, 'info');
+
+                if (response.status === 206) {
+                    if (actualSize === 1024) {
+                        log('✅ 完美！Range请求工作正常，返回了正确的部分内容', 'success');
+                    } else {
+                        log(`⚠️ 状态码206但大小不对，期望1024字节，实际${actualSize}字节`, 'error');
+                    }
+                } else if (response.status === 200) {
+                    log(`❌ 服务器不支持Range请求，返回了完整文件(${actualSize}字节)`, 'error');
+                    log('🔧 这将导致华为设备安装失败！', 'error');
+                } else {
+                    log(`❌ 请求失败: ${response.status} ${response.statusText}`, 'error');
+                }
+
+            } catch (error) {
+                log(`💥 测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testFull() {
+            log('🔍 开始测试完整下载...', 'info');
+            
+            const hapUrl = '/hap/AppSigned.hap';
+            
+            try {
+                const response = await fetch(hapUrl);
+                log(`📊 状态: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                const blob = await response.blob();
+                log(`📦 文件大小: ${blob.size.toLocaleString()} 字节`, 'success');
+                
+            } catch (error) {
+                log(`💥 测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载时自动运行测试
+        window.onload = function() {
+            log('🚀 页面加载完成，开始自动测试...', 'info');
+            setTimeout(testRange, 1000);
+        };
+    </script>
+</body>
+</html> 

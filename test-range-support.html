@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Range请求支持测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .info {
+            color: #17a2b8;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Cloudflare Range请求支持测试</h1>
+    
+    <div class="test-container">
+        <h2>测试说明</h2>
+        <p>此工具将测试您的Cloudflare部署是否正确支持Range请求（分片下载），这是华为HAP包下载的必要条件。</p>
+        <p><strong>期望结果：</strong>服务器应该返回状态码206（Partial Content）来表示支持分片下载。</p>
+    </div>
+
+    <div class="test-container">
+        <h2>测试控制</h2>
+        <button onclick="testRangeSupport()">测试HAP包Range支持</button>
+        <button onclick="testManifestRange()">测试Manifest Range支持</button>
+        <button onclick="clearResults()">清除结果</button>
+    </div>
+
+    <div class="test-container">
+        <h2>测试结果</h2>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        async function testRangeSupport() {
+            log('开始测试HAP包的Range请求支持...', 'info');
+            
+            const hapUrl = './hap/entry-default-signed.hap';
+            
+            try {
+                // 测试Range请求
+                const response = await fetch(hapUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Range': 'bytes=0-1023'  // 请求前1024字节
+                    }
+                });
+
+                log(`请求URL: ${hapUrl}`, 'info');
+                log(`请求头: Range: bytes=0-1023`, 'info');
+                log(`响应状态码: ${response.status}`, response.status === 206 ? 'success' : 'error');
+
+                // 检查响应头
+                const acceptRanges = response.headers.get('Accept-Ranges');
+                const contentRange = response.headers.get('Content-Range');
+                const contentLength = response.headers.get('Content-Length');
+
+                log(`Accept-Ranges头: ${acceptRanges || '未设置'}`, acceptRanges === 'bytes' ? 'success' : 'error');
+                log(`Content-Range头: ${contentRange || '未设置'}`, contentRange ? 'success' : 'error');
+                log(`Content-Length头: ${contentLength || '未设置'}`, 'info');
+
+                if (response.status === 206) {
+                    log('✅ 服务器支持Range请求！', 'success');
+                } else if (response.status === 200) {
+                    log('⚠️ 服务器返回完整文件而不是部分内容，可能不支持Range请求', 'error');
+                } else {
+                    log(`❌ 请求失败，状态码: ${response.status}`, 'error');
+                }
+
+            } catch (error) {
+                log(`❌ 测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testManifestRange() {
+            log('开始测试Manifest文件的Range请求支持...', 'info');
+            
+            const manifestUrl = './hap/manifest.json5';
+            
+            try {
+                const response = await fetch(manifestUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Range': 'bytes=0-99'  // 请求前100字节
+                    }
+                });
+
+                log(`请求URL: ${manifestUrl}`, 'info');
+                log(`响应状态码: ${response.status}`, response.status === 206 ? 'success' : 'error');
+
+                const acceptRanges = response.headers.get('Accept-Ranges');
+                log(`Accept-Ranges头: ${acceptRanges || '未设置'}`, acceptRanges === 'bytes' ? 'success' : 'error');
+
+                if (response.status === 206) {
+                    log('✅ Manifest文件支持Range请求！', 'success');
+                } else {
+                    log('⚠️ Manifest文件可能不支持Range请求', 'error');
+                }
+
+            } catch (error) {
+                log(`❌ 测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载时显示基本信息
+        window.onload = function() {
+            log('页面加载完成，可以开始测试', 'info');
+            log('确保您已经部署了_headers文件到Cloudflare Pages', 'info');
+        };
+    </script>
+</body>
+</html> 

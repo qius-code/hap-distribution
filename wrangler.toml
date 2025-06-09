@@ -1,0 +1,9 @@
+name = "hap-range-handler"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# 注释掉路由配置，先部署基本的Worker
+# [env.production]
+# routes = [
+#   { pattern = "qius.hm-34r.pages.dev/hap/*", zone_name = "hm-34r.pages.dev" }
+# ] 

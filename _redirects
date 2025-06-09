@@ -1,0 +1,6 @@
+# 确保所有资源文件可以正确访问
+/hap/* /hap/:splat 200
+/asset/* /asset/:splat 200
+
+# 主页面路由
+/* /index.html 200 

@@ -1,0 +1,31 @@
+# 配置HAP包和manifest文件的响应头，支持分片下载
+/hap/*.hap
+  Accept-Ranges: bytes
+  Content-Type: application/octet-stream
+  Cache-Control: public, max-age=3600
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+  Access-Control-Allow-Headers: Range, Content-Range
+  Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges
+
+/hap/manifest.json5
+  Accept-Ranges: bytes
+  Content-Type: application/json
+  Cache-Control: public, max-age=3600
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+  Access-Control-Allow-Headers: Range, Content-Range
+  Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges
+
+# 配置图标资源
+/asset/*.png
+  Accept-Ranges: bytes
+  Content-Type: image/png
+  Cache-Control: public, max-age=31536000
+  Access-Control-Allow-Origin: *
+
+# 配置主页面
+/
+  Cache-Control: public, max-age=3600
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff 
